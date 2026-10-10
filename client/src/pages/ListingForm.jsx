@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../api'
 
-// Build the Sell an Item page (see README.md "Your task").
+// Sell an Item page (see README.md "Your task").
 // Routed at /listings/new (sell) and /listings/:id (edit), both inside <ProtectedRoute>.
 
 const defaults = { title: '', description: '', price: 0, category: 'other', condition: 'used', status: 'active' }
@@ -18,10 +18,31 @@ export default function ListingForm() {
   const [form, setForm] = useState(defaults)
   const [error, setError] = useState('')
 
-  // TODO (edit mode): when there is an `id`, load the listing and fill the form.
+  // Edit mode: load the listing and fill the form. New mode: start from the defaults.
   useEffect(() => {
-    if (!id) return
-    // TODO
+    setError('')
+    if (!id) {
+      setForm(defaults)
+      return
+    }
+    async function load() {
+      try {
+        const res = await api.get(`/listings/${id}`)
+        const l = res.data.listing // the server wraps it: { listing: {...} }
+        // Copy only the editable fields (never seller, _id, dates)
+        setForm({
+          title: l.title,
+          price: l.price,
+          category: l.category,
+          condition: l.condition,
+          status: l.status,
+          description: l.description || ''
+        })
+      } catch (err) {
+        setError(err.response?.data?.message || err.message)
+      }
+    }
+    load()
   }, [id])
 
   // One handler for every input: the input's `name` says which field to update
@@ -32,17 +53,19 @@ export default function ListingForm() {
     setForm(prev => ({ ...prev, [name]: newValue }))
   }
 
-  // TODO: POST a new listing, or PATCH the existing one when editing,
-  // then go back to /listings. Show the server's error message on failure.
-  // Send the form to the server, then go back to the listings page
+  // Create (POST) or edit (PATCH), then go back to the listings page
   async function onSubmit(e) {
     e.preventDefault()
     setError('')
     try {
-      await api.post('/listings', form)
+      if (id) {
+        await api.patch(`/listings/${id}`, form)
+      } else {
+        await api.post('/listings', form)
+      }
       nav('/listings')
     } catch (err) {
-      // Show the server's message (e.g. 400 for a negative price)
+      // Show the server's message (e.g. 400 for a negative price, 403 for someone else's listing)
       setError(err.response?.data?.message || err.message)
     }
   }
@@ -91,7 +114,6 @@ export default function ListingForm() {
           <textarea className="input" name="description" rows={4} placeholder="Optional"
             value={form.description} onChange={onChange} />
         </label>
-
 
         {error && <div className="text-red-600 text-sm">{error}</div>}
         <button className="btn" type="submit">Save</button>
